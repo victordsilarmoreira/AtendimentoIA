@@ -1,5 +1,4 @@
 const express = require('express');
-const axios = require('axios');
 const app = express();
 app.use(express.json());
 
@@ -19,42 +18,39 @@ app.post('/webhook', async (req, res) => {
     }
 
     // Etapa 1: Enviar para ChatGPT
-    const respostaGPT = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: "Você é um atendente simpático da Bsantos fotografias e vídeos" },
-          { role: "user", content: text }
-        ],
-        temperature: 0.7
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${OPENAI_TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
+   const respostaGPT = await fetch("https://api.openai.com/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${OPENAI_TOKEN}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    model: "gpt-4o",
+    messages: [
+      { role: "system", content: "Você é um atendente simpático do outlet Só Marcas." },
+      { role: "user", content: text }
+    ],
+    temperature: 0.7
+  })
+});
+const respostaJson = await respostaGPT.json();
+const resposta = respostaJson.choices[0].message.content;
 
-    const resposta = respostaGPT.data.choices[0].message.content;
 
     // Etapa 2: Enviar resposta para o Digisac
-    await axios.post(
-      "https://bsantos.digisac.biz/api/v1/messages",
-      {
-        text: resposta,
-        type: "chat",
-        contactId: contactId,
-        origin: "bot"
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${DIGISAC_TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
+  await fetch("https://bsantos.digisac.biz/api/v1/messages", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${DIGISAC_TOKEN}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    text: resposta,
+    type: "chat",
+    contactId: contactId,
+    origin: "bot"
+  })
+});
 
     // Log interno
     logs.push({ texto: text, resposta });
