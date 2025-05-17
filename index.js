@@ -1,6 +1,6 @@
-const express = require('express');
+const express = import('express');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
-const Database = require('better-sqlite3');
+const Database = import('better-sqlite3');
 const app = express();
 app.use(express.json());
 
