@@ -10,20 +10,24 @@ const DIGISAC_TOKEN = process.env.DIGISAC_TOKEN;
 
 const db = new sqlite3.Database('./logs.db');
 
-// Cria tabela de logs persistente
+// Criação das tabelas persistentes
+
 db.run(`CREATE TABLE IF NOT EXISTS logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   contact_id TEXT,
   texto TEXT,
   resposta TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)`)
+)`);
+
+
 db.run(`CREATE TABLE IF NOT EXISTS instrucoes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   texto TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)`);;
+)`);
 
+// Rota principal de Webhook
 app.post('/webhook', async (req, res) => {
   try {
     const payload = req.body;
@@ -92,6 +96,7 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
+// Monitoramento dos logs recentes
 app.get('/monitor', (req, res) => {
   db.all(`SELECT texto, resposta, contact_id, created_at FROM logs ORDER BY created_at DESC LIMIT 10`, [], (err, rows) => {
     if (err) {
@@ -102,9 +107,12 @@ app.get('/monitor', (req, res) => {
   });
 });
 
+// Painel HTML
 app.get('/painel', (req, res) => {
   res.sendFile(__dirname + '/painel.html');
 });
+
+// Registro de novas instruções
 app.post('/instrucoes', (req, res) => {
   const { texto } = req.body;
   if (!texto) return res.status(400).json({ error: "Texto da instrução é obrigatório." });
@@ -118,26 +126,10 @@ app.post('/instrucoes', (req, res) => {
   });
 });
 
-
+// Servir arquivos estáticos (JS, CSS, etc)
 app.use('/static', express.static('static'));
-document.getElementById("formInstrucoes").addEventListener("submit", async function (e) {
-  e.preventDefault();
-  const texto = document.getElementById("instrucaoTexto").value;
-
-  const res = await fetch("/instrucoes", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ texto })
-  });
-
-  const data = await res.json();
-  document.getElementById("statusInstrucao").innerText = data.status || data.error;
-  document.getElementById("instrucaoTexto").value = "";
-});
-
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Servidor ativo na porta ${port}`);
 });
-
