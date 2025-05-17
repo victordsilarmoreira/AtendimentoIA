@@ -1,8 +1,11 @@
-const express = import('express');
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
-const Database = import('better-sqlite3');
-const app = express();
-app.use(express.json());
+import express from 'express';
+import fetch from 'node-fetch';
+import Database from 'better-sqlite3';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 // Tokens de ambiente
 const OPENAI_TOKEN = process.env.OPENAI_TOKEN;
