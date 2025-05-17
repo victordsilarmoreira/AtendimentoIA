@@ -57,6 +57,8 @@ app.post('/webhook', async (req, res) => {
     historico.push({ role: "user", content: text });
 
     // Enviar histórico + nova pergunta para o ChatGPT
+    console.log("🧠 Prompt enviado para OpenAI:");
+    console.log(JSON.stringify(historico, null, 2));
     const respostaGPT = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
