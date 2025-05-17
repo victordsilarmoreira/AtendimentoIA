@@ -10,14 +10,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 
-// Tokens de ambiente
 const OPENAI_TOKEN = process.env.OPENAI_TOKEN;
 const DIGISAC_TOKEN = process.env.DIGISAC_TOKEN;
 
-// Conexão com banco SQLite
 const db = new Database('./logs.db');
 
-// Criação das tabelas
 db.prepare(`CREATE TABLE IF NOT EXISTS logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   contact_id TEXT,
@@ -32,7 +29,6 @@ db.prepare(`CREATE TABLE IF NOT EXISTS instrucoes (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )`).run();
 
-// Webhook principal
 app.post('/webhook', async (req, res) => {
   try {
     const payload = req.body;
@@ -43,22 +39,35 @@ app.post('/webhook', async (req, res) => {
       return res.status(400).json({ error: "text ou contactId ausente" });
     }
 
-    // Buscar últimas 10 mensagens anteriores
-    const historico = db.prepare(`
+    const instrucoes = db.prepare(`SELECT texto FROM instrucoes ORDER BY created_at ASC`).all();
+    const historicoBruto = db.prepare(`
       SELECT texto FROM logs
       WHERE contact_id = ?
       ORDER BY created_at DESC
       LIMIT 10
-    `).all(contactId).reverse().map(row => ({
+    `).all(contactId);
+
+    const messages = [];
+
+    instrucoes.forEach(instrucao => {
+      messages.push({
+        role: "system",
+        content: instrucao.texto
+      });
+    });
+
+    historicoBruto.reverse().forEach(row => {
+      messages.push({
+        role: "user",
+        content: row.texto
+      });
+    });
+
+    messages.push({
       role: "user",
-      content: row.texto
-    }));
+      content: text
+    });
 
-    historico.push({ role: "user", content: text });
-
-    // Enviar histórico + nova pergunta para o ChatGPT
-    console.log("🧠 Prompt enviado para OpenAI:");
-    console.log(JSON.stringify(historico, null, 2));
     const respostaGPT = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -67,7 +76,7 @@ app.post('/webhook', async (req, res) => {
       },
       body: JSON.stringify({
         model: "gpt-4o",
-        messages: historico,
+        messages: messages,
         temperature: 0.7
       })
     });
@@ -75,11 +84,9 @@ app.post('/webhook', async (req, res) => {
     const respostaJson = await respostaGPT.json();
     const resposta = respostaJson.choices[0].message.content;
 
-    // Gravar no banco
     db.prepare(`INSERT INTO logs (contact_id, texto, resposta) VALUES (?, ?, ?)`)
       .run(contactId, text, resposta);
 
-    // Enviar para o DigiSac
     await fetch("https://bsantos.digisac.biz/api/v1/messages", {
       method: "POST",
       headers: {
@@ -95,45 +102,37 @@ app.post('/webhook', async (req, res) => {
     });
 
     res.json({ status: "ok", entrada: text, resposta });
-
   } catch (err) {
     console.error("❌ Erro:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Inserir nova instrução manualmente
 app.post('/instrucoes', (req, res) => {
   const { texto } = req.body;
-  if (!texto || texto.trim().length < 3) {
-    return res.status(400).json({ error: "Texto da instrução é obrigatório." });
-  }
+  if (!texto) return res.status(400).json({ error: "Texto da instrução é obrigatório." });
 
   const stmt = db.prepare(`INSERT INTO instrucoes (texto) VALUES (?)`);
   const info = stmt.run(texto);
   res.json({ status: "Instrução salva", id: info.lastInsertRowid });
 });
 
-// Exibe os últimos registros
-app.get('/monitor', (req, res) => {
-  const rows = db.prepare(`
-    SELECT texto, resposta, contact_id, created_at
-    FROM logs
-    ORDER BY created_at DESC
-    LIMIT 10
-  `).all();
+app.get('/instrucoes', (req, res) => {
+  const rows = db.prepare(`SELECT id, texto, created_at FROM instrucoes ORDER BY created_at ASC`).all();
   res.json(rows);
 });
 
-// Página HTML
+app.get('/monitor', (req, res) => {
+  const rows = db.prepare(`SELECT texto, resposta, contact_id, created_at FROM logs ORDER BY created_at DESC LIMIT 10`).all();
+  res.json(rows);
+});
+
 app.get('/painel', (req, res) => {
   res.sendFile(__dirname + '/painel.html');
 });
 
-// Servir arquivos estáticos (JS do painel)
 app.use('/static', express.static('static'));
 
-// Inicialização do servidor
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`🚀 Servidor rodando na porta ${port}`);
