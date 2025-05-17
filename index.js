@@ -1,6 +1,5 @@
 // index.js
 const express = require('express');
-const fetch = require('node-fetch');
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
 app.use(express.json());
