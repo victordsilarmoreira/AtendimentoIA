@@ -1,13 +1,13 @@
 // index.js
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const app = express();
 app.use(express.json());
 
 const OPENAI_TOKEN = process.env.OPENAI_TOKEN;
 const DIGISAC_TOKEN = process.env.DIGISAC_TOKEN;
 
-const db = new sqlite3.Database('./logs.db');
+const db = new Database('./logs.db');
 
 // Criação das tabelas persistentes
 
