@@ -1,11 +1,28 @@
+// index.js
 const express = require('express');
+const fetch = require('node-fetch');
+const sqlite3 = require('sqlite3').verbose();
 const app = express();
 app.use(express.json());
 
-const logs = [];
-
 const OPENAI_TOKEN = process.env.OPENAI_TOKEN;
-const DIGISAC_TOKEN = "fdb36d7ef9c813c6516ff7fae664a529199b4311";
+const DIGISAC_TOKEN = process.env.DIGISAC_TOKEN;
+
+const db = new sqlite3.Database('./logs.db');
+
+// Cria tabela de logs persistente
+db.run(`CREATE TABLE IF NOT EXISTS logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id TEXT,
+  texto TEXT,
+  resposta TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`)
+db.run(`CREATE TABLE IF NOT EXISTS instrucoes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  texto TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`);;
 
 app.post('/webhook', async (req, res) => {
   try {
@@ -17,47 +34,57 @@ app.post('/webhook', async (req, res) => {
       return res.status(400).json({ error: "text ou contactId ausente" });
     }
 
-    // Etapa 1: Enviar para ChatGPT
-   const respostaGPT = await fetch("https://api.openai.com/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": `Bearer ${OPENAI_TOKEN}`,
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "gpt-4o",
-    messages: [
-      { role: "system", content: "Você é um atendente simpático do outlet Só Marcas." },
-      { role: "user", content: text }
-    ],
-    temperature: 0.7
-  })
-});
-const respostaJson = await respostaGPT.json();
-const resposta = respostaJson.choices[0].message.content;
+    // Buscar as últimas 10 mensagens desse contato
+    db.all(
+      `SELECT texto FROM logs WHERE contact_id = ? ORDER BY created_at DESC LIMIT 10`,
+      [contactId],
+      async (err, rows) => {
+        if (err) {
+          console.error("Erro ao buscar histórico:", err);
+          return res.status(500).json({ error: "Erro ao buscar histórico" });
+        }
 
+        const historico = rows.reverse().map(row => ({ role: "user", content: row.texto }));
+        historico.push({ role: "user", content: text });
 
-    // Etapa 2: Enviar resposta para o Digisac
-  await fetch("https://bsantos.digisac.biz/api/v1/messages", {
-  method: "POST",
-  headers: {
-    "Authorization": `Bearer ${DIGISAC_TOKEN}`,
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    text: resposta,
-    type: "chat",
-    contactId: contactId,
-    origin: "bot"
-  })
-});
+        // Enviar para ChatGPT
+        const respostaGPT = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${OPENAI_TOKEN}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "gpt-4o",
+            messages: historico,
+            temperature: 0.7
+          })
+        });
 
-    // Log interno
-    logs.push({ texto: text, resposta });
-    if (logs.length > 20) logs.shift();
+        const respostaJson = await respostaGPT.json();
+        const resposta = respostaJson.choices[0].message.content;
 
-    console.log("✅ Webhook processado com sucesso:", { text, resposta });
-    res.json({ status: "ok", entrada: text, resposta });
+        // Salvar nova mensagem no banco
+        db.run(`INSERT INTO logs (contact_id, texto, resposta) VALUES (?, ?, ?)`, [contactId, text, resposta]);
+
+        // Enviar resposta para Digisac
+        await fetch("https://bsantos.digisac.biz/api/v1/messages", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${DIGISAC_TOKEN}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            text: resposta,
+            type: "chat",
+            contactId: contactId,
+            origin: "bot"
+          })
+        });
+
+        res.json({ status: "ok", entrada: text, resposta });
+      }
+    );
 
   } catch (err) {
     console.error("❌ Erro no webhook:", err.message);
@@ -66,16 +93,51 @@ const resposta = respostaJson.choices[0].message.content;
 });
 
 app.get('/monitor', (req, res) => {
-  res.json(logs.slice(-10));
+  db.all(`SELECT texto, resposta, contact_id, created_at FROM logs ORDER BY created_at DESC LIMIT 10`, [], (err, rows) => {
+    if (err) {
+      console.error("Erro ao buscar logs:", err);
+      return res.status(500).json({ error: "Erro ao buscar logs" });
+    }
+    res.json(rows);
+  });
 });
 
 app.get('/painel', (req, res) => {
   res.sendFile(__dirname + '/painel.html');
 });
+app.post('/instrucoes', (req, res) => {
+  const { texto } = req.body;
+  if (!texto) return res.status(400).json({ error: "Texto da instrução é obrigatório." });
+
+  db.run(`INSERT INTO instrucoes (texto) VALUES (?)`, [texto], function (err) {
+    if (err) {
+      console.error("Erro ao salvar instrução:", err);
+      return res.status(500).json({ error: "Erro ao salvar instrução." });
+    }
+    res.json({ status: "Instrução salva", id: this.lastID });
+  });
+});
+
 
 app.use('/static', express.static('static'));
+document.getElementById("formInstrucoes").addEventListener("submit", async function (e) {
+  e.preventDefault();
+  const texto = document.getElementById("instrucaoTexto").value;
+
+  const res = await fetch("/instrucoes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ texto })
+  });
+
+  const data = await res.json();
+  document.getElementById("statusInstrucao").innerText = data.status || data.error;
+  document.getElementById("instrucaoTexto").value = "";
+});
+
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Servidor ativo na porta ${port}`);
 });
+

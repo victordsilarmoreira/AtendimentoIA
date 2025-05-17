@@ -3,10 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <title>Painel de Monitoramento</title>
-  <script src="/static/painel.js"></script>
+  <script src="/static/painel.js" defer></script>
 </head>
 <body>
   <h2>Últimas mensagens recebidas</h2>
   <div id="log">Carregando...</div>
+
+  <hr>
+  <h3>Nova Instrução para o ChatGPT</h3>
+  <form id="formInstrucoes">
+    <textarea id="instrucaoTexto" rows="4" cols="50" placeholder="Digite a instrução..."></textarea><br>
+    <button type="submit">Salvar Instrução</button>
+  </form>
+  <div id="statusInstrucao"></div>
 </body>
 </html>
+
