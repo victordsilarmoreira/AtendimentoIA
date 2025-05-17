@@ -28,6 +28,11 @@ db.prepare(`CREATE TABLE IF NOT EXISTS instrucoes (
   texto TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )`).run();
+const cols = db.prepare(`PRAGMA table_info(instrucoes)`).all();
+const temCategoria = cols.some(col => col.name === 'categoria');
+if (!temCategoria) {
+  db.prepare(`ALTER TABLE instrucoes ADD COLUMN categoria TEXT`).run();
+}
 
 app.post('/webhook', async (req, res) => {
   try {
@@ -136,4 +141,22 @@ app.use('/static', express.static('static'));
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`🚀 Servidor rodando na porta ${port}`);
+});
+// Atualizar uma instrução
+app.put('/instrucoes/:id', (req, res) => {
+  const { id } = req.params;
+  const { texto } = req.body;
+  if (!texto) return res.status(400).json({ error: "Texto obrigatório" });
+
+  const stmt = db.prepare(`UPDATE instrucoes SET texto = ? WHERE id = ?`);
+  const info = stmt.run(texto, id);
+  res.json({ status: "Instrução atualizada", changes: info.changes });
+});
+
+// Excluir uma instrução
+app.delete('/instrucoes/:id', (req, res) => {
+  const { id } = req.params;
+  const stmt = db.prepare(`DELETE FROM instrucoes WHERE id = ?`);
+  const info = stmt.run(id);
+  res.json({ status: "Instrução excluída", changes: info.changes });
 });

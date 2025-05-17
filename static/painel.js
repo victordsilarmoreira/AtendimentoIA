@@ -22,4 +22,52 @@ document.getElementById("formInstrucoes").addEventListener("submit", async funct
   const data = await res.json();
   document.getElementById("statusInstrucao").innerText = data.status || data.error;
   document.getElementById("instrucaoTexto").value = "";
+  carregarInstrucoes();
 });
+
+async function carregarInstrucoes() {
+  const res = await fetch("/instrucoes");
+  const instrucoes = await res.json();
+
+  const lista = instrucoes.map(instrucao => `
+    <div class="instrucao" data-id="${instrucao.id}">
+      <textarea rows="3">${instrucao.texto}</textarea><br>
+      <select class="categoria">
+        <option value="geral"${instrucao.categoria === 'geral' ? ' selected' : ''}>Geral</option>
+        <option value="promoção"${instrucao.categoria === 'promoção' ? ' selected' : ''}>Promoção</option>
+        <option value="produto"${instrucao.categoria === 'produto' ? ' selected' : ''}>Produto</option>
+        <option value="comportamento"${instrucao.categoria === 'comportamento' ? ' selected' : ''}>Comportamento</option>
+      </select><br>
+      <button onclick="editarInstrucao(${instrucao.id}, this)">Salvar</button>
+      <button onclick="excluirInstrucao(${instrucao.id})">Excluir</button>
+    </div>
+  `).join('');
+
+  document.getElementById("listaInstrucoes").innerHTML = lista;
+}
+
+
+const textarea = btn.parentElement.querySelector("textarea");
+const select = btn.parentElement.querySelector("select");
+const texto = textarea.value;
+const categoria = select.value;
+
+const res = await fetch(`/instrucoes/${id}`, {
+  method: "PUT",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ texto, categoria })
+});
+
+
+async function excluirInstrucao(id) {
+  if (!confirm("Deseja realmente excluir esta instrução?")) return;
+  const res = await fetch(`/instrucoes/${id}`, {
+    method: "DELETE"
+  });
+  const data = await res.json();
+  alert(data.status || data.error);
+  carregarInstrucoes();
+}
+
+carregarInstrucoes();
+
